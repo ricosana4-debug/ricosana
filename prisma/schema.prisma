@@ -1,0 +1,101 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Admin/Teacher model with role-based access
+model Admin {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String   // Hashed password using bcrypt
+  role      String   @default("teacher") // "super_admin" or "teacher"
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  attendanceRecords Attendance[]
+  financeRecords    Finance[]
+}
+
+// Class model (12 classes: Kelas 1-12)
+model Class {
+  id        String   @id @default(cuid())
+  name      String   @unique // Kelas 1, Kelas 2, ..., Kelas 12
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  sessions Session[]
+  students Student[]
+}
+
+// Session model (5 sessions per class)
+model Session {
+  id        String   @id @default(cuid())
+  name      String   // Sesi 1, Sesi 2, Sesi 3, Sesi 4, Sesi 5
+  time      String?  // e.g., "08:00 - 09:30"
+  classId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  class      Class       @relation(fields: [classId], references: [id], onDelete: Cascade)
+  students   Student[]
+  attendance Attendance[]
+
+  @@unique([classId, name])
+}
+
+// Student model - simplified (no jenjang field, kelas is enough)
+model Student {
+  id           String   @id @default(cuid())
+  studentId    String   @unique // Unique student number
+  name         String?  // Student name (can be edited by teacher)
+  classId      String   // Kelas 1-12
+  sessionId    String?  // Selected session for this student
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  class      Class       @relation(fields: [classId], references: [id], onDelete: Cascade)
+  session    Session?    @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  attendance Attendance[]
+}
+
+// Attendance model - linked to student by ID
+model Attendance {
+  id        String   @id @default(cuid())
+  date      DateTime
+  present   Boolean  @default(false)
+  studentId String   // Foreign key to Student
+  sessionId String
+  adminId   String?  // Who marked the attendance
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  admin   Admin?  @relation(fields: [adminId], references: [id])
+  
+  @@unique([studentId, sessionId, date]) // One attendance record per student per session per day
+}
+
+// Finance model for income and expenses
+model Finance {
+  id          String   @id @default(cuid())
+  type        String   // "income" or "expense"
+  amount      Float    // Amount in Rupiah
+  description String?
+  category    String?  // e.g., "SPP", "Gaji", "Listrik", etc.
+  date        DateTime
+  adminId     String?  // Who inputted
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  admin Admin? @relation(fields: [adminId], references: [id])
+}
