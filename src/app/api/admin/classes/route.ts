@@ -81,3 +81,132 @@ export async function POST(request: Request) {
     )
   }
 }
+
+// PUT update class (super admin only)
+export async function PUT(request: Request) {
+  try {
+    const user = await getSession()
+    if (!user || !isSuperAdmin(user)) {
+      return NextResponse.json(
+        { error: 'Hanya super admin yang dapat mengubah kelas' },
+        { status: 403 }
+      )
+    }
+
+    const { id, name } = await request.json()
+
+    if (!id || !name) {
+      return NextResponse.json(
+        { error: 'ID dan nama kelas harus diisi' },
+        { status: 400 }
+      )
+    }
+
+    // Check if class exists
+    const classExists = await db.class.findUnique({
+      where: { id },
+    })
+
+    if (!classExists) {
+      return NextResponse.json(
+        { error: 'Kelas tidak ditemukan' },
+        { status: 404 }
+      )
+    }
+
+    // Check if new name already exists (and is not the same class)
+    const duplicateName = await db.class.findUnique({
+      where: { name },
+    })
+
+    if (duplicateName && duplicateName.id !== id) {
+      return NextResponse.json(
+        { error: 'Nama kelas sudah digunakan' },
+        { status: 400 }
+      )
+    }
+
+    const updatedClass = await db.class.update({
+      where: { id },
+      data: { name },
+      include: {
+        sessions: {
+          orderBy: { name: 'asc' },
+        },
+        students: {
+          orderBy: { studentId: 'asc' },
+        },
+        _count: {
+          select: { students: true },
+        },
+      },
+    })
+
+    return NextResponse.json({ class: updatedClass })
+  } catch (error) {
+    console.error('Update class error:', error)
+    return NextResponse.json(
+      { error: 'Terjadi kesalahan' },
+      { status: 500 }
+    )
+  }
+}
+
+// DELETE class (super admin only)
+export async function DELETE(request: Request) {
+  try {
+    const user = await getSession()
+    if (!user || !isSuperAdmin(user)) {
+      return NextResponse.json(
+        { error: 'Hanya super admin yang dapat menghapus kelas' },
+        { status: 403 }
+      )
+    }
+
+    const { id } = await request.json()
+
+    if (!id) {
+      return NextResponse.json(
+        { error: 'ID kelas harus diisi' },
+        { status: 400 }
+      )
+    }
+
+    // Check if class exists
+    const classExists = await db.class.findUnique({
+      where: { id },
+      include: {
+        students: true,
+        sessions: true,
+      },
+    })
+
+    if (!classExists) {
+      return NextResponse.json(
+        { error: 'Kelas tidak ditemukan' },
+        { status: 404 }
+      )
+    }
+
+    // Check if class has students
+    if (classExists.students.length > 0) {
+      return NextResponse.json(
+        { error: `Kelas masih memiliki ${classExists.students.length} siswa. Hapus siswa terlebih dahulu.` },
+        { status: 400 }
+      )
+    }
+
+    // Delete class and its sessions
+    await db.class.delete({
+      where: { id },
+    })
+
+    return NextResponse.json({ message: 'Kelas berhasil dihapus' })
+  } catch (error) {
+    console.error('Delete class error:', error)
+    return NextResponse.json(
+      { error: 'Terjadi kesalahan' },
+      { status: 500 }
+    )
+  }
+}

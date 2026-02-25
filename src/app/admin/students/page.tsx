@@ -15,6 +15,8 @@ import {
   Edit2,
   UserPlus,
   AlertCircle,
+  Upload,
+  Download,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -26,7 +28,14 @@ interface ClassData {
   id: string
   name: string
   sessions: { id: string; name: string; time: string | null }[]
-  students: { id: string; studentId: string; name: string | null; sessionId: string | null }[]
+  students: { 
+    id: string
+    studentId: string
+    name: string | null
+    sessionId: string | null
+    adminId: string | null
+    advisor?: { id: string; name: string }
+  }[]
   _count: { students: number }
 }
 
@@ -38,6 +47,7 @@ interface User {
 
 export default function StudentsPage() {
   const [classes, setClasses] = useState<ClassData[]>([])
+  const [admins, setAdmins] = useState<{ id: string; name: string; assignedClass: string | null }[]>([])
   const [user, setUser] = useState<User | null>(null)
   const [selectedClass, setSelectedClass] = useState<ClassData | null>(null)
   const [selectedSession, setSelectedSession] = useState<{ id: string; name: string; time: string | null } | null>(null)
@@ -46,15 +56,25 @@ export default function StudentsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [showAddModal, setShowAddModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
-  const [editingStudent, setEditingStudent] = useState<{ id: string; studentId: string; name: string; classId: string; sessionId: string | null } | null>(null)
+  const [showBulkImportModal, setShowBulkImportModal] = useState(false)
+  const [editingStudent, setEditingStudent] = useState<{ id: string; studentId: string; name: string; classId: string; sessionId: string | null; adminId?: string | null } | null>(null)
+  const [inlineEditId, setInlineEditId] = useState<string | null>(null)
+  const [inlineEditName, setInlineEditName] = useState('')
   
   // Form states for adding new student
   const [newStudentId, setNewStudentId] = useState('')
   const [newStudentName, setNewStudentName] = useState('')
   const [newStudentClass, setNewStudentClass] = useState('')
   const [newStudentSession, setNewStudentSession] = useState('')
+  const [newStudentAdmin, setNewStudentAdmin] = useState('')
   const [addingStudent, setAddingStudent] = useState(false)
   const [formError, setFormError] = useState('')
+  
+  // Bulk import states
+  const [bulkImportFile, setBulkImportFile] = useState<File | null>(null)
+  const [bulkImporting, setBulkImporting] = useState(false)
+  const [bulkImportError, setBulkImportError] = useState('')
+  const [bulkImportResult, setBulkImportResult] = useState<any>(null)
 
   useEffect(() => {
     fetchUser()
@@ -75,10 +95,16 @@ export default function StudentsPage() {
 
   const fetchData = async () => {
     try {
-      const classesRes = await fetch('/api/admin/classes')
+      const [classesRes, adminsRes] = await Promise.all([
+        fetch('/api/admin/classes'),
+        fetch('/api/admin/admins'),
+      ])
+
       const classesData = await classesRes.json()
+      const adminsData = await adminsRes.json()
       
       setClasses(classesData.classes || [])
+      setAdmins(adminsData.admins || [])
       
       if (classesData.classes?.length > 0) {
         const firstClass = classesData.classes[0]
@@ -100,6 +126,7 @@ export default function StudentsPage() {
     setNewStudentName('')
     setNewStudentClass(selectedClass?.id || '')
     setNewStudentSession('')
+    setNewStudentAdmin('')
     setFormError('')
   }
 
@@ -129,6 +156,7 @@ export default function StudentsPage() {
           name: newStudentName.trim(),
           classId: newStudentClass,
           sessionId: newStudentSession || null,
+          adminId: newStudentAdmin || null,
         }),
       })
 
@@ -163,6 +191,7 @@ export default function StudentsPage() {
           name: editingStudent.name.trim(),
           classId: editingStudent.classId,
           sessionId: editingStudent.sessionId,
+          adminId: editingStudent.adminId || null,
         }),
       })
 
@@ -209,13 +238,14 @@ export default function StudentsPage() {
     setShowAddModal(true)
   }
 
-  const openEditModal = (student: { id: string; studentId: string; name: string | null; classId: string; sessionId: string | null }) => {
+  const openEditModal = (student: { id: string; studentId: string; name: string | null; classId: string; sessionId: string | null; adminId?: string | null }) => {
     setEditingStudent({
       id: student.id,
       studentId: student.studentId,
       name: student.name || '',
       classId: student.classId,
       sessionId: student.sessionId,
+      adminId: student.adminId || null,
     })
     setFormError('')
     setShowEditModal(true)
@@ -236,10 +266,108 @@ export default function StudentsPage() {
     )
   })
 
-  // Get sessions for selected class in add/edit modal
   const getSessionsForClass = (classId: string) => {
     const cls = classes.find(c => c.id === classId)
     return cls?.sessions || []
+  }
+
+  const getAdminForClass = (classId: string) => {
+    const cls = classes.find(c => c.id === classId)
+    if (!cls) return null
+    return admins.find(a => a.assignedClass === cls.name) || null
+  }
+
+  const handleBulkImport = async () => {
+    setBulkImportError('')
+    
+    if (!bulkImportFile) {
+      setBulkImportError('Pilih file terlebih dahulu')
+      return
+    }
+
+    if (!selectedClass) {
+      setBulkImportError('Pilih kelas terlebih dahulu')
+      return
+    }
+
+    setBulkImporting(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', bulkImportFile)
+      formData.append('classId', selectedClass.id)
+
+      const res = await fetch('/api/admin/students/import', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const data = await res.json()
+
+      if (res.ok) {
+        setBulkImportResult(data)
+        setBulkImportFile(null)
+        await fetchData()
+      } else {
+        setBulkImportError(data.error || 'Gagal mengimport file')
+      }
+    } catch (error) {
+      setBulkImportError('Terjadi kesalahan saat upload file')
+    } finally {
+      setBulkImporting(false)
+    }
+  }
+
+  const handleInlineEditStart = (student: any) => {
+    setInlineEditId(student.id)
+    setInlineEditName(student.name || '')
+  }
+
+  const handleInlineEditSave = async (studentId: string) => {
+    if (!inlineEditName.trim()) {
+      alert('Nama tidak boleh kosong')
+      return
+    }
+
+    setSaving(studentId)
+    try {
+      const student = selectedClass?.students.find(s => s.id === studentId)
+      if (!student) return
+
+      const res = await fetch('/api/admin/students', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: studentId,
+          name: inlineEditName.trim(),
+          classId: selectedClass?.id,
+          sessionId: student.sessionId,
+        }),
+      })
+
+      if (res.ok) {
+        await fetchData()
+        setInlineEditId(null)
+        setInlineEditName('')
+      } else {
+        const data = await res.json()
+        alert(data.error || 'Gagal mengupdate siswa')
+      }
+    } catch (error) {
+      alert('Terjadi kesalahan')
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  const downloadTemplate = () => {
+    const csv = 'studentId,name,sessionId\nS001,Nama Siswa 1,\nS002,Nama Siswa 2,'
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'template_siswa.csv'
+    a.click()
+    window.URL.revokeObjectURL(url)
   }
 
   if (loading) {
@@ -258,13 +386,28 @@ export default function StudentsPage() {
           <h1 className="text-xl lg:text-2xl font-bold text-gray-900">Data Siswa</h1>
           <p className="text-gray-500 text-sm mt-1">Kelola data siswa - Tambah, Edit, Hapus</p>
         </div>
-        <Button
-          onClick={openAddModal}
-          className="bg-gradient-to-r from-[#ff8c00] to-[#ffc107] hover:from-[#e67e00] hover:to-[#e6ad00] h-9"
-        >
-          <Plus className="w-4 h-4 mr-1" />
-          Tambah Siswa
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => {
+              setBulkImportResult(null)
+              setBulkImportError('')
+              setBulkImportFile(null)
+              setShowBulkImportModal(true)
+            }}
+            variant="outline"
+            className="h-9"
+          >
+            <Upload className="w-4 h-4 mr-1" />
+            Import CSV
+          </Button>
+          <Button
+            onClick={openAddModal}
+            className="bg-gradient-to-r from-[#ff8c00] to-[#ffc107] hover:from-[#e67e00] hover:to-[#e6ad00] h-9"
+          >
+            <Plus className="w-4 h-4 mr-1" />
+            Tambah Siswa
+          </Button>
+        </div>
       </div>
 
       {/* Filters Row */}
@@ -381,6 +524,7 @@ export default function StudentsPage() {
                     <th className="text-left p-3 text-xs font-medium text-gray-500 w-16">ID</th>
                     <th className="text-left p-3 text-xs font-medium text-gray-500">Nama Siswa</th>
                     <th className="text-left p-3 text-xs font-medium text-gray-500 w-20">Kelas</th>
+                    <th className="text-left p-3 text-xs font-medium text-gray-500 w-20">Pembimbing</th>
                     <th className="text-center p-3 text-xs font-medium text-gray-500 w-28">Aksi</th>
                   </tr>
                 </thead>
@@ -398,11 +542,53 @@ export default function StudentsPage() {
                       >
                         <td className="p-3 text-sm font-medium text-[#ff8c00]">{student.studentId}</td>
                         <td className="p-3 text-sm">
-                          {student.name || <span className="text-gray-400 italic text-xs">Belum diisi</span>}
+                          {inlineEditId === student.id ? (
+                            <div className="flex gap-1">
+                              <Input
+                                value={inlineEditName}
+                                onChange={(e) => setInlineEditName(e.target.value)}
+                                autoFocus
+                                className="h-8 text-sm"
+                              />
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleInlineEditSave(student.id)}
+                                className="h-8 w-8 p-0 text-green-600 hover:bg-green-50"
+                                disabled={saving === student.id}
+                              >
+                                <Check className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setInlineEditId(null)}
+                                className="h-8 w-8 p-0 text-gray-400 hover:bg-gray-100"
+                              >
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <span
+                              onClick={() => handleInlineEditStart(student)}
+                              className="cursor-pointer hover:text-[#ff8c00] transition"
+                            >
+                              {student.name ? (
+                                student.name
+                              ) : (
+                                <span className="text-gray-400 italic text-xs">Klik untuk isi nama</span>
+                              )}
+                            </span>
+                          )}
                         </td>
                         <td className="p-3">
                           <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs font-medium">
                             {selectedClass.name}
+                          </span>
+                        </td>
+                        <td className="p-3 text-sm">
+                          <span className="text-gray-600">
+                            {student.advisor?.name || '-'}
                           </span>
                         </td>
                         <td className="p-3">
@@ -411,9 +597,8 @@ export default function StudentsPage() {
                               size="sm"
                               variant="outline"
                               onClick={() => openEditModal({ ...student, classId: selectedClass.id })}
-                              disabled={isLoading}
                               className="h-7 w-7 p-0"
-                              title="Edit"
+                              title="Edit detail"
                             >
                               <Edit2 className="w-3 h-3" />
                             </Button>
@@ -508,6 +693,11 @@ export default function StudentsPage() {
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
+                  {newStudentClass && getAdminForClass(newStudentClass) && (
+                    <p className="text-xs text-gray-600 mt-2">
+                      Pembimbing Otomatis: <strong>{getAdminForClass(newStudentClass)?.name}</strong>
+                    </p>
+                  )}
                 </div>
 
                 {/* Session Selection */}
@@ -523,6 +713,24 @@ export default function StudentsPage() {
                     {getSessionsForClass(newStudentClass).map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.name} {s.time ? `(${s.time})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Admin / Pembimbing Selection */}
+                <div>
+                  <Label className="text-sm font-medium">Pembimbing (Opsional)</Label>
+                  <select
+                    value={newStudentAdmin}
+                    onChange={(e) => setNewStudentAdmin(e.target.value)}
+                    className="w-full h-10 px-3 border rounded-lg text-sm mt-1"
+                    disabled={admins.length === 0}
+                  >
+                    <option value="">Pilih Pembimbing (opsional)</option>
+                    {admins.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} {a.assignedClass ? `— ${a.assignedClass}` : ''}
                       </option>
                     ))}
                   </select>
@@ -618,6 +826,11 @@ export default function StudentsPage() {
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
+                  {editingStudent.classId && getAdminForClass(editingStudent.classId) && (
+                    <p className="text-xs text-gray-600 mt-2">
+                      Pembimbing Otomatis: <strong>{getAdminForClass(editingStudent.classId)?.name}</strong>
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -631,6 +844,22 @@ export default function StudentsPage() {
                     {getSessionsForClass(editingStudent.classId).map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.name} {s.time ? `(${s.time})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <Label className="text-sm font-medium">Pembimbing</Label>
+                  <select
+                    value={editingStudent.adminId || ''}
+                    onChange={(e) => setEditingStudent({ ...editingStudent, adminId: e.target.value || null })}
+                    className="w-full h-10 px-3 border rounded-lg text-sm mt-1"
+                  >
+                    <option value="">Pilih Pembimbing...</option>
+                    {admins.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} {a.assignedClass ? `— ${a.assignedClass}` : ''}
                       </option>
                     ))}
                   </select>
@@ -658,6 +887,141 @@ export default function StudentsPage() {
                       <Save className="w-4 h-4 mr-1" />
                     )}
                     Simpan
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Bulk Import Modal */}
+      <AnimatePresence>
+        {showBulkImportModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+            onClick={() => setShowBulkImportModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-white rounded-xl w-full max-w-md p-5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+                <Upload className="w-5 h-5 text-[#ff8c00]" />
+                Import Data Siswa (CSV)
+              </h2>
+
+              {bulkImportError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-600 text-sm">
+                  <AlertCircle className="w-4 h-4" />
+                  {bulkImportError}
+                </div>
+              )}
+
+              {bulkImportResult && (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+                  <p className="font-medium mb-2">{bulkImportResult.message}</p>
+                  <div className="space-y-1 text-xs">
+                    <p>✅ Berhasil: {bulkImportResult.results.success}</p>
+                    <p>❌ Gagal: {bulkImportResult.results.failed}</p>
+                    {bulkImportResult.results.errors.length > 0 && (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer font-medium">Lihat detail error</summary>
+                        <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
+                          {bulkImportResult.results.errors.map((err: any, i: number) => (
+                            <p key={i}>
+                              Row {err.row} ({err.studentId}): {err.error}
+                            </p>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div>
+                  <Label className="text-sm font-medium block mb-2">Format File CSV</Label>
+                  <div className="bg-gray-50 p-3 rounded text-xs text-gray-600 font-mono overflow-x-auto mb-3">
+                    <p>studentId,name,sessionId</p>
+                    <p>S001,Nama Siswa 1,</p>
+                    <p>S002,Nama Siswa 2,</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={downloadTemplate}
+                    className="w-full mb-3 h-9 text-[#ff8c00]"
+                  >
+                    <Download className="w-4 h-4 mr-1" />
+                    Download Template
+                  </Button>
+                </div>
+
+                <div>
+                  <Label className="text-sm font-medium block mb-2">Pilih Kelas</Label>
+                  <select
+                    value={selectedClass?.id || ''}
+                    onChange={(e) => {
+                      const cls = classes.find(c => c.id === e.target.value)
+                      if (cls) setSelectedClass(cls)
+                    }}
+                    className="w-full h-10 px-3 border rounded-lg text-sm"
+                  >
+                    <option value="">Pilih Kelas...</option>
+                    {classes.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <Label className="text-sm font-medium block mb-2">Upload File CSV</Label>
+                  <input
+                    type="file"
+                    accept=".csv,.xlsx"
+                    onChange={(e) => {
+                      setBulkImportFile(e.target.files?.[0] || null)
+                      setBulkImportError('')
+                    }}
+                    className="w-full h-10 px-3 border rounded-lg text-sm file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-[#ff8c00] file:text-white hover:file:bg-[#e67e00] cursor-pointer"
+                  />
+                  {bulkImportFile && (
+                    <p className="text-xs text-green-600 mt-1">✓ File: {bulkImportFile.name}</p>
+                  )}
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1 h-10"
+                    onClick={() => {
+                      setShowBulkImportModal(false)
+                      setBulkImportError('')
+                      setBulkImportFile(null)
+                      setBulkImportResult(null)
+                    }}
+                  >
+                    Tutup
+                  </Button>
+                  <Button
+                    className="flex-1 h-10 bg-gradient-to-r from-[#ff8c00] to-[#ffc107] hover:from-[#e67e00] hover:to-[#e6ad00]"
+                    onClick={handleBulkImport}
+                    disabled={bulkImporting || !bulkImportFile || !selectedClass}
+                  >
+                    {bulkImporting ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Upload className="w-4 h-4 mr-1" />
+                    )}
+                    Import
                   </Button>
                 </div>
               </div>

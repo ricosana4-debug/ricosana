@@ -28,9 +28,10 @@ async function main() {
         password: superAdminPassword,
         role: 'super_admin',
         isActive: true,
+        assignedClass: 'Kelas 1',
       },
     }),
-    // 8 Teachers
+    // 8 Teachers (each assigned to a class)
     prisma.admin.create({
       data: {
         email: 'nadia@starlish.com',
@@ -38,6 +39,7 @@ async function main() {
         password: teacherPassword,
         role: 'teacher',
         isActive: true,
+        assignedClass: 'Kelas 2',
       },
     }),
     prisma.admin.create({
@@ -47,6 +49,7 @@ async function main() {
         password: teacherPassword,
         role: 'teacher',
         isActive: true,
+        assignedClass: 'Kelas 3',
       },
     }),
     prisma.admin.create({
@@ -56,6 +59,7 @@ async function main() {
         password: teacherPassword,
         role: 'teacher',
         isActive: true,
+        assignedClass: 'Kelas 4',
       },
     }),
     prisma.admin.create({
@@ -65,6 +69,7 @@ async function main() {
         password: teacherPassword,
         role: 'teacher',
         isActive: true,
+        assignedClass: 'Kelas 5',
       },
     }),
     prisma.admin.create({
@@ -74,6 +79,7 @@ async function main() {
         password: teacherPassword,
         role: 'teacher',
         isActive: true,
+        assignedClass: 'Kelas 6',
       },
     }),
     prisma.admin.create({
@@ -83,6 +89,7 @@ async function main() {
         password: teacherPassword,
         role: 'teacher',
         isActive: true,
+        assignedClass: 'Kelas 7',
       },
     }),
     prisma.admin.create({
@@ -92,6 +99,7 @@ async function main() {
         password: teacherPassword,
         role: 'teacher',
         isActive: true,
+        assignedClass: 'Kelas 8',
       },
     }),
     prisma.admin.create({
@@ -101,6 +109,7 @@ async function main() {
         password: teacherPassword,
         role: 'teacher',
         isActive: true,
+        assignedClass: 'Kelas 9',
       },
     }),
     // 3 Reserve Admins (for future teachers)
@@ -111,6 +120,7 @@ async function main() {
         password: teacherPassword,
         role: 'teacher',
         isActive: true,
+        assignedClass: 'Kelas 10',
       },
     }),
     prisma.admin.create({
@@ -120,6 +130,7 @@ async function main() {
         password: teacherPassword,
         role: 'teacher',
         isActive: true,
+        assignedClass: 'Kelas 11',
       },
     }),
     prisma.admin.create({
@@ -129,6 +140,7 @@ async function main() {
         password: teacherPassword,
         role: 'teacher',
         isActive: true,
+        assignedClass: 'Kelas 12',
       },
     }),
   ])
@@ -141,19 +153,19 @@ async function main() {
   const classes = await Promise.all(
     classNames.map((name) =>
       prisma.class.create({
-        data: { name },
+        data: { name, capacity: 15 },
       })
     )
   )
   console.log(`✅ Created ${classes.length} classes (Kelas 1-12)`)
 
-  // Create 5 Sessions per Class (Sesi 1-5)
+  // Create 5 Sessions per Class (Sesi 1-5) with specific times
   const sessionTimes = [
-    { name: 'Sesi 1', time: '08:00 - 09:30' },
-    { name: 'Sesi 2', time: '09:45 - 11:15' },
-    { name: 'Sesi 3', time: '13:00 - 14:30' },
-    { name: 'Sesi 4', time: '14:45 - 16:15' },
-    { name: 'Sesi 5', time: '16:30 - 18:00' },
+    { name: 'Sesi 1', time: '10:00 - 11:30' },
+    { name: 'Sesi 2', time: '11:30 - 13:00' },
+    { name: 'Sesi 3', time: '13:30 - 15:00' },
+    { name: 'Sesi 4', time: '15:00 - 16:30' },
+    { name: 'Sesi 5', time: '17:00 - 19:30' },
   ]
 
   let sessionCount = 0

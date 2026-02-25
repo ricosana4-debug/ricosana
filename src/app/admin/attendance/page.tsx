@@ -447,16 +447,34 @@ export default function AttendancePage() {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ delay: index * 0.005 }}
-                        className="border-b last:border-0 hover:bg-gray-50"
+                        className="border-b last:border-0 hover:bg-orange-50 cursor-pointer"
+                        onClick={() => {
+                          // Click on row to toggle attendance
+                          if (isPresent === true) {
+                            handleAttendanceChange(student.id, false)
+                          } else {
+                            handleAttendanceChange(student.id, true)
+                          }
+                        }}
                       >
                         <td className="p-3 text-sm font-medium text-[#ff8c00]">{student.studentId}</td>
-                        <td className="p-3 text-sm">
+                        <td className="p-3 text-sm flex items-center gap-2">
+                          <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition ${
+                            isPresent === true
+                              ? 'bg-green-500 border-green-500'
+                              : isPresent === false
+                              ? 'bg-red-100 border-red-300'
+                              : 'border-gray-300'
+                          }`}>
+                            {isPresent === true && <Check className="w-3 h-3 text-white" />}
+                            {isPresent === false && <X className="w-3 h-3 text-red-500" />}
+                          </div>
                           <div>
-                            {student.name || <span className="text-gray-400 italic text-xs">Nama belum diisi</span>}
+                            <div className={`${isPresent === true ? 'font-semibold' : ''}`}>
+                              {student.name || <span className="text-gray-400 italic text-xs">(nama belum diisi)</span>}
+                            </div>
                             {adminName && isPresent !== undefined && (
-                              <p className="text-xs text-gray-400 mt-0.5">
-                                Dicatat oleh: {adminName}
-                              </p>
+                              <p className="text-xs text-gray-400">Oleh: {adminName}</p>
                             )}
                           </div>
                         </td>
@@ -479,27 +497,27 @@ export default function AttendancePage() {
                             )}
                           </span>
                         </td>
-                        <td className="p-3">
+                        <td className="p-3" onClick={(e) => e.stopPropagation()}>
                           <div className="flex justify-center gap-1">
                             <Button
                               size="sm"
                               variant={isPresent === true ? 'default' : 'outline'}
                               onClick={() => handleAttendanceChange(student.id, true)}
                               disabled={isLoading || !selectedSession}
-                              className={`h-7 w-7 p-0 ${isPresent === true ? 'bg-green-500 hover:bg-green-600' : 'border-green-500 text-green-500 hover:bg-green-50'}`}
-                              title="Hadir"
+                              className={`h-7 px-2 text-xs ${isPresent === true ? 'bg-green-500 hover:bg-green-600' : 'border-green-500 text-green-500 hover:bg-green-50'}`}
+                              title="Tandai hadir"
                             >
-                              {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                              {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <><Check className="w-3 h-3" /> Hadir</>}
                             </Button>
                             <Button
                               size="sm"
                               variant={isPresent === false ? 'destructive' : 'outline'}
                               onClick={() => handleAttendanceChange(student.id, false)}
                               disabled={isLoading || !selectedSession}
-                              className={`h-7 w-7 p-0 ${isPresent === false ? '' : 'border-red-500 text-red-500 hover:bg-red-50'}`}
-                              title="Tidak Hadir"
+                              className={`h-7 px-2 text-xs ${isPresent === false ? '' : 'border-red-500 text-red-500 hover:bg-red-50'}`}
+                              title="Tandai tidak hadir"
                             >
-                              <X className="w-3 h-3" />
+                              <X className="w-3 h-3" /> <span>Tidak</span>
                             </Button>
                           </div>
                         </td>

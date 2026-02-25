@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
       include: {
         class: true,
         session: true,
+        advisor: true,
       },
       orderBy: [{ studentId: 'asc' }],
     })
@@ -49,7 +50,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const { studentId, name, classId, sessionId } = await request.json()
+    const { studentId, name, classId, sessionId, adminId } = await request.json()
 
     // Validate required fields
     if (!studentId || !studentId.trim()) {
@@ -104,16 +105,27 @@ export async function POST(request: Request) {
       }
     }
 
+    // Use provided adminId if given, otherwise auto-assign based on class
+    let assignedAdminId = adminId || null
+    if (!assignedAdminId) {
+      const admin = await db.admin.findFirst({
+        where: { assignedClass: classExists.name },
+      })
+      assignedAdminId = admin?.id || null
+    }
+
     const student = await db.student.create({
       data: {
         studentId: studentId.trim().toUpperCase(),
         name: name?.trim() || null,
         classId,
         sessionId: sessionId || null,
+        adminId: assignedAdminId,
       },
       include: {
         class: true,
         session: true,
+        advisor: true,
       },
     })
 
@@ -138,7 +150,7 @@ export async function PUT(request: Request) {
       )
     }
 
-    const { id, name, classId, sessionId } = await request.json()
+    const { id, name, classId, sessionId, adminId } = await request.json()
 
     if (!id) {
       return NextResponse.json(
@@ -178,7 +190,24 @@ export async function PUT(request: Request) {
     const updateData: any = {}
     
     if (name !== undefined) updateData.name = name?.trim() || null
-    if (classId !== undefined) updateData.classId = classId
+    if (classId !== undefined) {
+      updateData.classId = classId
+      // If explicit adminId provided, prefer it; otherwise auto-assign based on new class
+      if (adminId) {
+        updateData.adminId = adminId
+      } else {
+        const classData = await db.class.findUnique({
+          where: { id: classId },
+        })
+        const admin = await db.admin.findFirst({
+          where: { assignedClass: classData?.name },
+        })
+        updateData.adminId = admin?.id || null
+      }
+    } else if (adminId !== undefined) {
+      // Allow updating admin without changing class
+      updateData.adminId = adminId || null
+    }
     if (sessionId !== undefined) updateData.sessionId = sessionId || null
 
     const student = await db.student.update({
@@ -187,6 +216,7 @@ export async function PUT(request: Request) {
       include: {
         class: true,
         session: true,
+        advisor: true,
       },
     })
 

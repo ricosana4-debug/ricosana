@@ -12,23 +12,26 @@ datasource db {
 
 // Admin/Teacher model with role-based access
 model Admin {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String
-  password  String   // Hashed password using bcrypt
-  role      String   @default("teacher") // "super_admin" or "teacher"
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String
+  password      String   // Hashed password using bcrypt
+  role          String   @default("teacher") // "super_admin" or "teacher"
+  isActive      Boolean  @default(true)
+  assignedClass String?  // Kelas yang dibimbing (e.g., "Kelas 1", "Kelas 2")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
   
   attendanceRecords Attendance[]
   financeRecords    Finance[]
+  advisedStudents   Student[] @relation("StudentAdvisor")
 }
 
 // Class model (12 classes: Kelas 1-12)
 model Class {
   id        String   @id @default(cuid())
   name      String   @unique // Kelas 1, Kelas 2, ..., Kelas 12
+  capacity  Int      @default(15)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
@@ -59,11 +62,14 @@ model Student {
   name         String?  // Student name (can be edited by teacher)
   classId      String   // Kelas 1-12
   sessionId    String?  // Selected session for this student
+  status       String   @default("active") // "active" or "inactive"
+  adminId      String?  // Advisor/Pembimbing
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   
   class      Class       @relation(fields: [classId], references: [id], onDelete: Cascade)
   session    Session?    @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  advisor    Admin?      @relation("StudentAdvisor", fields: [adminId], references: [id], onDelete: SetNull)
   attendance Attendance[]
 }
 
